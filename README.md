@@ -12,16 +12,18 @@ Reusable baseline for running a **replicable, delegation-first OpenClaw setup** 
 
 ## Quick Start
 
-1. Create a new OpenClaw workspace on the target instance.
-2. Copy these files into the workspace root.
-3. Update `USER.md` with owner details.
-4. Update `TOOLS.md` with machine-specific notes (hosts, cameras, voice prefs, etc.).
-5. Optionally update `SOUL.md` persona.
-6. Ensure `memory/` exists and start logging daily notes.
-7. Run a smoke test:
+1. Clone this repo on the target machine.
+2. Run deterministic apply:
+   - `./scripts/apply-mvp-v1.sh /path/to/.openclaw/workspace`
+3. Run verification:
+   - `./scripts/verify-mvp-v1.sh /path/to/.openclaw/workspace`
+4. Update only local identity/env fields (`USER.md`, `TOOLS.md`).
+5. Run a smoke test:
    - delegation request
    - one background execution
    - one escalation-only completion message
+
+See `REPLICATE.md` for full replication instructions.
 
 ## Required Files
 
@@ -33,6 +35,7 @@ Reusable baseline for running a **replicable, delegation-first OpenClaw setup** 
 - `HEARTBEAT.md` – Optional heartbeat checklist
 - `MVP-V1.md` – Delegation operating spec and acceptance criteria
 - `memory/YYYY-MM-DD.md` – Daily raw memory logs
+- `.mvp-v1-manifest.json` – applied-template/version record
 
 ## Replication Checklist
 

@@ -6,21 +6,22 @@
 - Access to workspace directory
 - Optional: `gh` CLI authenticated for repo workflows
 
-## 2) Initialize Workspace Baseline
+## 2) Apply Deterministic MVP Template
 
-Copy the template files from this repo into your OpenClaw workspace root:
+From this repo directory:
 
-- `AGENTS.md`
-- `SOUL.md`
-- `USER.md`
-- `TOOLS.md`
-- `MEMORY.md`
-- `HEARTBEAT.md`
+```bash
+chmod +x scripts/*.sh
+./scripts/apply-mvp-v1.sh /path/to/.openclaw/workspace
+```
 
-Create:
+This applies the exact MVP core files, creates missing memory files, and writes `.mvp-v1-manifest.json`.
 
-- `memory/` directory
-- `memory/<today>.md`
+Verify:
+
+```bash
+./scripts/verify-mvp-v1.sh /path/to/.openclaw/workspace
+```
 
 ## 3) Customize Identity + Operator Profile
 

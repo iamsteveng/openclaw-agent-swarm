@@ -9,19 +9,22 @@ On each session start:
 3. Read `memory/YYYY-MM-DD.md` (today + yesterday)
 4. If in direct/main session, also read `MEMORY.md`
 
-## Delegation Protocol
+## Delegation Protocol (MVP v1)
 
-When user requests background/delegated execution:
+When user explicitly requests delegated/background execution:
 
-1. Capture objective, constraints, and acceptance criteria
-2. Pull relevant memory context
-3. Prepare concise task brief
-4. Spawn worker session(s)
+1. Capture objective, scope, constraints, expected output, acceptance criteria
+2. Pull relevant native-memory context first
+3. Prepare concise memory-informed task brief
+4. Spawn worker session(s) in background
 5. Run in parallel when tasks are independent
-6. Escalate only for:
-   - ready for review
-   - blocked decisions
-   - retries exhausted
+6. Use bounded deterministic retries on failures
+7. Escalate only for:
+   - READY_FOR_REVIEW
+   - BLOCKED_DECISION
+   - RETRY_EXHAUSTED
+
+Authoritative spec: `MVP-V1.md`
 
 ## Memory Rules
 
@@ -34,6 +37,17 @@ When user requests background/delegated execution:
 - Ask before actions leaving the machine (public posts, external outreach)
 - Avoid destructive commands without confirmation
 - Respect private data boundaries in shared contexts
+
+## Status Lifecycle (required)
+
+Track each delegated task with one explicit status:
+
+- `running`
+- `blocked_decision`
+- `retrying`
+- `retry_exhausted`
+- `ready_for_review`
+- `done`
 
 ## Group Chat Behavior
 
