@@ -6,6 +6,7 @@ Reusable baseline for running a **replicable, delegation-first OpenClaw setup** 
 
 - A practical folder/file baseline for continuity (`AGENTS.md`, `SOUL.md`, `USER.md`, `TOOLS.md`, memory files)
 - A delegation protocol tuned for background-parallel execution with escalation-only notifications
+- A concrete operating spec in `MVP-V1.md`
 - Heartbeat + cron guidance so each instance can run proactive checks without noise
 - A quick-start setup flow for new machines
 
@@ -30,6 +31,7 @@ Reusable baseline for running a **replicable, delegation-first OpenClaw setup** 
 - `TOOLS.md` – Local environment notes
 - `MEMORY.md` – Long-term curated memory (main session only)
 - `HEARTBEAT.md` – Optional heartbeat checklist
+- `MVP-V1.md` – Delegation operating spec and acceptance criteria
 - `memory/YYYY-MM-DD.md` – Daily raw memory logs
 
 ## Replication Checklist
