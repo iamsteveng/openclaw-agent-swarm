@@ -1,0 +1,57 @@
+# OpenClaw Agent Swarm
+
+Reusable baseline for running a **replicable, delegation-first OpenClaw setup** across multiple instances.
+
+## What this gives you
+
+- A practical folder/file baseline for continuity (`AGENTS.md`, `SOUL.md`, `USER.md`, `TOOLS.md`, memory files)
+- A delegation protocol tuned for background-parallel execution with escalation-only notifications
+- Heartbeat + cron guidance so each instance can run proactive checks without noise
+- A quick-start setup flow for new machines
+
+## Quick Start
+
+1. Create a new OpenClaw workspace on the target instance.
+2. Copy these files into the workspace root.
+3. Update `USER.md` with owner details.
+4. Update `TOOLS.md` with machine-specific notes (hosts, cameras, voice prefs, etc.).
+5. Optionally update `SOUL.md` persona.
+6. Ensure `memory/` exists and start logging daily notes.
+7. Run a smoke test:
+   - delegation request
+   - one background execution
+   - one escalation-only completion message
+
+## Required Files
+
+- `AGENTS.md` – Operating model and behavioral rules
+- `SOUL.md` – Tone/persona and communication style
+- `USER.md` – Human profile and preferences
+- `TOOLS.md` – Local environment notes
+- `MEMORY.md` – Long-term curated memory (main session only)
+- `HEARTBEAT.md` – Optional heartbeat checklist
+- `memory/YYYY-MM-DD.md` – Daily raw memory logs
+
+## Replication Checklist
+
+- [ ] OpenClaw installed and running
+- [ ] GitHub CLI (`gh`) authenticated (if using GitHub automation)
+- [ ] Baseline files copied
+- [ ] `USER.md` and `TOOLS.md` customized
+- [ ] `memory/` created
+- [ ] Heartbeat policy verified
+- [ ] Delegation protocol tested end-to-end
+
+## Suggested Test Scenario
+
+Use one real project task (not toy file creation):
+
+1. Human asks for a concrete outcome (e.g., triage CI failures).
+2. Main agent gathers constraints + acceptance criteria.
+3. Main agent spawns background worker(s).
+4. Worker returns result with artifacts.
+5. Main agent only escalates if review/decision is needed.
+
+## License
+
+MIT
