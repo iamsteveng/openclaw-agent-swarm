@@ -25,7 +25,6 @@ If the phrase is absent, the assistant must refuse execution and ask the user to
 
 ## In-Scope Actions
 Mapped to fixed subcommands only:
-- `add`
 - `add_user`
 - `resume`
 - `list`
@@ -40,12 +39,8 @@ No arbitrary shell, no extra subcommands, no command chaining.
 
 ## Command Catalog (what each command is for, and when to use)
 
-### `add <username>`
-- **For:** Immediate legacy add flow (non-staged provisioning path).
-- **Use when:** You need backward-compatible behavior and do not need guided pause/resume checkpoints.
-
 ### `add_user <username>`
-- **For:** Staged hybrid onboarding (Option A + C): auto provisioning + guided checkpoint flow.
+- **For:** Hybrid onboarding (Option A + C): auto provisioning + guided checkpoint flow.
 - **Use when:** Onboarding a new teammate end-to-end via orchestrator with Slack/CLI checkpoint confirmations.
 
 ### `resume <username> <DONE|RETRY|FAIL> [reason...]`
@@ -77,7 +72,7 @@ No arbitrary shell, no extra subcommands, no command chaining.
 ## Natural-Language Trigger Patterns
 Examples the parser may accept **only when magic phrase is present**:
 - `USERCTL LIFECYCLE add user oc_alice`
-- `USERCTL LIFECYCLE staged add_user oc_alice`
+- `USERCTL LIFECYCLE add_user oc_alice`
 - `USERCTL LIFECYCLE resume oc_alice DONE`
 - `USERCTL LIFECYCLE resume oc_alice RETRY reason oauth popup closed`
 - `USERCTL LIFECYCLE resume oc_alice FAIL reason token rejected`
@@ -96,7 +91,7 @@ If parsing is ambiguous, assistant must ask a clarifying question and do nothing
 ## Argument Parsing Contract
 
 ### Username
-- Required for: `add`, `add_user`, `resume`, `status <username>`, `restart <username>`, `disable`, `remove`
+- Required for: `add_user`, `resume`, `status <username>`, `restart <username>`, `disable`, `remove`
 - Must match policy regex (default): `^oc_[a-z0-9_]{2,24}$`
 - Must not be forbidden user (e.g., `root`, `ec2-user`, `nobody`, `daemon`, `bin`, `sys`)
 
@@ -122,7 +117,6 @@ If parsing is ambiguous, assistant must ask a clarifying question and do nothing
 ## Deterministic Command Mapping
 Use absolute executable path:
 
-- `add <u>` -> `/usr/local/sbin/openclaw-userctl add <u>`
 - `add_user <u>` -> `/usr/local/sbin/openclaw-userctl add_user <u>`
 - `resume <u> <ACTION> [reason]` -> `/usr/local/sbin/openclaw-userctl resume <u> <ACTION> [reason]`
 - `list` -> `/usr/local/sbin/openclaw-userctl list`
@@ -143,7 +137,7 @@ The assistant must not emit or run any command not in this mapping.
 1. **Magic phrase required** (`USERCTL LIFECYCLE`).
 2. **Dry parse first**: echo parsed intent before execution for mutating operations.
 3. **Explicit confirmation required** before mutating commands:
-   - mutating: `add`, `add_user`, `resume`, `restart`, `disable`, `remove`
+   - mutating: `add_user`, `resume`, `restart`, `disable`, `remove`
    - read-only: `list`, `status`
 4. **High-risk double confirmation** required for:
    - `remove ... --force-delete`
