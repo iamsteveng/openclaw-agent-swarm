@@ -9,6 +9,7 @@ Reusable baseline for running a **replicable, delegation-first OpenClaw setup** 
 - A concrete operating spec in `MVP-V1.md`
 - Heartbeat + cron guidance so each instance can run proactive checks without noise
 - A quick-start setup flow for new machines
+- Multi-user orchestrator lifecycle wrapper with guardrails (`scripts/openclaw-orchestrator-userctl.sh`)
 
 ## Quick Start
 
@@ -24,6 +25,54 @@ Reusable baseline for running a **replicable, delegation-first OpenClaw setup** 
    - one escalation-only completion message
 
 See `REPLICATE.md` for full replication instructions.
+
+## Multi-User Orchestrator (EC2)
+
+New wrapper script for deterministic user lifecycle operations:
+
+- Wrapper: `scripts/openclaw-orchestrator-userctl.sh`
+- Installed command path: `/usr/local/sbin/openclaw-userctl`
+- Skill contract: `skills/openclaw-userctl/SKILL.md`
+- Runbook: `RUNBOOK-ORCHESTRATOR.md`
+- Validation: `scripts/validate-orchestrator-userctl.sh`
+
+Lifecycle commands:
+- `add_user <username>` (recommended hybrid onboarding: automated + guided checkpoints)
+- `resume <username> <DONE|RETRY|FAIL> [reason]`
+- `add <username>` (legacy one-step mode)
+- `list`
+- `status [username]`
+- `restart <username|--all>`
+- `disable <username>`
+- `remove <username> [--force-delete] [--purge-home]`
+
+Guardrails:
+- strict username allowlist + deny list
+- no arbitrary shell passthrough
+- append-only audit log output
+- safe archive-first removal by default
+- Telegram skill trigger phrase required: `USERCTL LIFECYCLE`
+
+Validation:
+```bash
+./scripts/validate-orchestrator-userctl.sh
+```
+
+Hybrid onboarding example:
+```bash
+# 1) start onboarding (automated provisioning runs, then pauses)
+sudo openclaw-userctl add_user oc_alice
+
+# 2) perform Slack OAuth using the prompted template command, then confirm
+sudo openclaw-userctl resume oc_alice DONE
+
+# 3) perform CLI auth using prompted template command, then confirm
+sudo openclaw-userctl resume oc_alice DONE
+
+# optional retry/fail controls
+sudo openclaw-userctl resume oc_alice RETRY "oauth popup closed"
+sudo openclaw-userctl resume oc_alice FAIL "token rejected"
+```
 
 ## Required Files
 
