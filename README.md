@@ -35,7 +35,9 @@ New wrapper script for deterministic user lifecycle operations:
 - Validation: `scripts/validate-orchestrator-userctl.sh`
 
 Lifecycle commands:
-- `add <username>`
+- `add_user <username>` (recommended hybrid onboarding: automated + guided checkpoints)
+- `resume <username> <DONE|RETRY|FAIL> [reason]`
+- `add <username>` (legacy one-step mode)
 - `list`
 - `status [username]`
 - `restart <username|--all>`
@@ -51,6 +53,22 @@ Guardrails:
 Validation:
 ```bash
 ./scripts/validate-orchestrator-userctl.sh
+```
+
+Hybrid onboarding example:
+```bash
+# 1) start onboarding (automated provisioning runs, then pauses)
+sudo openclaw-userctl add_user oc_alice
+
+# 2) perform Slack OAuth using the prompted template command, then confirm
+sudo openclaw-userctl resume oc_alice DONE
+
+# 3) perform CLI auth using prompted template command, then confirm
+sudo openclaw-userctl resume oc_alice DONE
+
+# optional retry/fail controls
+sudo openclaw-userctl resume oc_alice RETRY "oauth popup closed"
+sudo openclaw-userctl resume oc_alice FAIL "token rejected"
 ```
 
 ## Required Files

@@ -9,13 +9,14 @@ Operate multiple OS-user OpenClaw accounts on one EC2 host with deterministic li
 - Validation: `scripts/validate-orchestrator-userctl.sh`
 
 ## Security Constraints
-- Wrapper supports fixed subcommands only (`add/list/status/restart/disable/remove`).
+- Wrapper supports fixed subcommands only (`add/add_user/resume/list/status/restart/disable/remove`).
 - No arbitrary shell passthrough.
 - Username policy enforcement:
   - allowlist regex
   - explicit deny list
 - Mutating commands require root (unless explicit test override).
-- Audit logging for all commands and outcomes.
+- Audit logging for all commands, outcomes, and onboarding phase transitions.
+- Guided checkpoints use fixed command templates only.
 - Safe default remove mode archives orchestrator state/workspace metadata unless `--force-delete` is used.
 
 ## Install (recommended)
@@ -30,15 +31,36 @@ Operate multiple OS-user OpenClaw accounts on one EC2 host with deterministic li
    - `/var/lib/openclaw-orchestrator`
    - `/var/log/openclaw-orchestrator`
 
-## Command Examples
-- Add user:
-  - `sudo openclaw-userctl add oc_alice`
-- List users:
-  - `sudo openclaw-userctl list`
-- Status (all):
+## Hybrid Onboarding Flow (Option A + C)
+
+### Command sequence (operator exact flow)
+1. Start staged onboarding:
+   - `sudo openclaw-userctl add_user oc_alice`
+2. Script pauses at Slack OAuth checkpoint and prints the fixed command template.
+3. Operator runs the printed Slack auth command, then resumes:
+   - `sudo openclaw-userctl resume oc_alice DONE`
+4. Script pauses at CLI auth checkpoint and prints the fixed command template.
+5. Operator runs the printed CLI auth command, then resumes:
+   - `sudo openclaw-userctl resume oc_alice DONE`
+6. Script finalizes service enable/restart and marks onboarding complete.
+
+### Retry / failure controls
+- Retry current checkpoint:
+  - `sudo openclaw-userctl resume oc_alice RETRY "oauth popup closed"`
+- Mark failed with reason:
+  - `sudo openclaw-userctl resume oc_alice FAIL "token rejected"`
+
+### Status checks
+- Full status:
   - `sudo openclaw-userctl status`
-- Status (single):
+- Per-user status (includes onboarding phase/status/retries):
   - `sudo openclaw-userctl status oc_alice`
+- List users with onboarding summary:
+  - `sudo openclaw-userctl list`
+
+## Legacy and lifecycle commands
+- Legacy one-step add:
+  - `sudo openclaw-userctl add oc_alice`
 - Restart one:
   - `sudo openclaw-userctl restart oc_alice`
 - Restart all:
@@ -61,10 +83,12 @@ Log record fields:
 - outcome (`ok|deny|fail`)
 - detail
 
+Includes `cmd=phase_transition` records for onboarding state machine moves.
+
 ## Validation (non-root dry run)
 `./scripts/validate-orchestrator-userctl.sh`
 
 ## Operational Notes
 - The wrapper expects systemd unit template: `openclaw-agent@<username>.service` by default.
-- Override service template in policy if your host uses a different unit naming convention.
-- For recovery, reconstruct registry from `/var/lib/openclaw-orchestrator/users/*.state` and audit log.
+- Override service template/checkpoint templates in policy if your host differs.
+- Recover onboarding from `/var/lib/openclaw-orchestrator/onboarding/*.state` and audit log.
