@@ -4,8 +4,8 @@ set -euo pipefail
 # openclaw-orchestrator-userctl.sh
 # Deterministic lifecycle wrapper for managed OpenClaw OS users.
 # Option A + C hybrid onboarding:
-# - automated provisioning
-# - guided pause/resume checkpoints for interactive auth
+# - automated provisioning (incl. systemd service creation)
+# - guided pause/resume checkpoints for Slack token config + health verification
 
 STATE_ROOT="${ORCH_STATE_ROOT:-/var/lib/openclaw-orchestrator}"
 USERS_DIR="$STATE_ROOT/users"
@@ -17,16 +17,22 @@ AUDIT_LOG="$LOG_DIR/audit.log"
 POLICY_FILE="${ORCH_POLICY_FILE:-/etc/openclaw-orchestrator/policy.env}"
 ALLOW_REGEX="${ORCH_ALLOW_REGEX:-^oc_[a-z0-9_]{2,24}$}"
 FORBIDDEN_USERS_DEFAULT="root ec2-user nobody daemon bin sys"
-SERVICE_TEMPLATE="${ORCH_SERVICE_TEMPLATE:-openclaw-agent@%s.service}"
-SLACK_OAUTH_CMD_TEMPLATE="${ORCH_SLACK_OAUTH_CMD_TEMPLATE:-sudo -iu %s openclaw channels login --channel slack}"
-CLI_AUTH_CMD_TEMPLATE="${ORCH_CLI_AUTH_CMD_TEMPLATE:-sudo -iu %s openclaw configure}"
+# FIX #2: Default service template now matches openclaw-gateway@<user>.service
+SERVICE_TEMPLATE="${ORCH_SERVICE_TEMPLATE:-openclaw-gateway@%s.service}"
+# FIX #5: CLI auth checkpoint replaced with health verification
+HEALTH_CHECK_CMD_TEMPLATE="${ORCH_HEALTH_CHECK_CMD_TEMPLATE:-sudo -iu %s openclaw health}"
+# FIX #3: System service source (openclaw node binary path)
+OPENCLAW_BIN="${ORCH_OPENCLAW_BIN:-/home/ubuntu/.npm-global/lib/node_modules/openclaw/dist/index.js}"
+OPENCLAW_SYMLINK="${ORCH_OPENCLAW_SYMLINK:-/usr/local/bin/openclaw}"
+# Gateway port base — each user gets base + uid offset, or set ORCH_GATEWAY_PORT_BASE
+GATEWAY_PORT_BASE="${ORCH_GATEWAY_PORT_BASE:-18800}"
 DRY_RUN="${ORCH_DRY_RUN:-0}"
 
 MUTATING_COMMANDS=" add add_user resume restart disable remove "
 
 PHASE_PROVISIONED="provisioned"
-PHASE_WAIT_SLACK="waiting_slack_oauth"
-PHASE_WAIT_CLI="waiting_cli_auth"
+PHASE_WAIT_SLACK="waiting_slack_config"
+PHASE_WAIT_HEALTH="waiting_health_check"
 PHASE_FINALIZING="finalizing"
 PHASE_COMPLETE="complete"
 PHASE_FAILED="failed"
@@ -39,8 +45,10 @@ load_policy() {
   ALLOW_REGEX="${ORCH_ALLOW_REGEX:-$ALLOW_REGEX}"
   FORBIDDEN_USERS="${ORCH_FORBIDDEN_USERS:-$FORBIDDEN_USERS_DEFAULT}"
   SERVICE_TEMPLATE="${ORCH_SERVICE_TEMPLATE:-$SERVICE_TEMPLATE}"
-  SLACK_OAUTH_CMD_TEMPLATE="${ORCH_SLACK_OAUTH_CMD_TEMPLATE:-$SLACK_OAUTH_CMD_TEMPLATE}"
-  CLI_AUTH_CMD_TEMPLATE="${ORCH_CLI_AUTH_CMD_TEMPLATE:-$CLI_AUTH_CMD_TEMPLATE}"
+  HEALTH_CHECK_CMD_TEMPLATE="${ORCH_HEALTH_CHECK_CMD_TEMPLATE:-$HEALTH_CHECK_CMD_TEMPLATE}"
+  OPENCLAW_BIN="${ORCH_OPENCLAW_BIN:-$OPENCLAW_BIN}"
+  OPENCLAW_SYMLINK="${ORCH_OPENCLAW_SYMLINK:-$OPENCLAW_SYMLINK}"
+  GATEWAY_PORT_BASE="${ORCH_GATEWAY_PORT_BASE:-$GATEWAY_PORT_BASE}"
 }
 
 usage() {
@@ -109,20 +117,10 @@ run_cmd() {
   "$@"
 }
 
-user_state_file() {
-  local u="$1"
-  echo "$USERS_DIR/$u.state"
-}
-
-onboarding_state_file() {
-  local u="$1"
-  echo "$ONBOARDING_DIR/$u.state"
-}
-
-is_managed_user() {
-  local u="$1"
-  [[ -f "$(user_state_file "$u")" ]]
-}
+user_state_file() { echo "$USERS_DIR/$1.state"; }
+onboarding_state_file() { echo "$ONBOARDING_DIR/$1.state"; }
+is_managed_user() { [[ -f "$(user_state_file "$1")" ]]; }
+service_name_for() { printf "$SERVICE_TEMPLATE" "$1"; }
 
 set_user_state() {
   local u="$1" status="$2"
@@ -133,15 +131,9 @@ updatedAt=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 EOF
 }
 
-service_name_for() {
-  local u="$1"
-  printf "$SERVICE_TEMPLATE" "$u"
-}
-
 read_onboarding_state() {
-  local u="$1"
   local f
-  f="$(onboarding_state_file "$u")"
+  f="$(onboarding_state_file "$1")"
   [[ -f "$f" ]] || return 1
   # shellcheck disable=SC1090
   source "$f"
@@ -149,22 +141,19 @@ read_onboarding_state() {
 
 write_onboarding_state() {
   local u="$1" phase="$2" status="$3" retries="$4" note="${5:-}"
-  local esc_note
-  printf -v esc_note '%q' "$note"
   cat > "$(onboarding_state_file "$u")" <<EOF
 username=$u
 phase=$phase
 status=$status
 retries=$retries
-note=$esc_note
+note=$note
 updatedAt=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 EOF
 }
 
 transition_onboarding() {
   local u="$1" next_phase="$2" next_status="$3" retry_count="$4" reason="${5:-}"
-  local cur_phase="none"
-  local cur_status="none"
+  local cur_phase="none" cur_status="none"
   if read_onboarding_state "$u"; then
     cur_phase="${phase:-none}"
     cur_status="${status:-none}"
@@ -173,33 +162,134 @@ transition_onboarding() {
   audit "ok" "phase_transition" "$u" "from=${cur_phase}/${cur_status} to=${next_phase}/${next_status} reason=${reason}"
 }
 
+# FIX #1: Ensure openclaw binary is accessible to all users system-wide
+ensure_openclaw_path() {
+  local symlink="$OPENCLAW_SYMLINK"
+  # If symlink already works, nothing to do
+  if [[ -L "$symlink" ]] && [[ -x "$symlink" ]]; then
+    # Verify a non-root user can actually traverse the path
+    local target
+    target="$(readlink -f "$symlink" 2>/dev/null || true)"
+    if [[ -n "$target" ]]; then
+      # Make sure all intermediate directories are world-executable
+      local dir
+      dir="$(dirname "$target")"
+      while [[ "$dir" != "/" && "$dir" != "." ]]; do
+        chmod o+x "$dir" 2>/dev/null || true
+        dir="$(dirname "$dir")"
+      done
+      chmod o+rx "$target" 2>/dev/null || true
+    fi
+    return 0
+  fi
+  if [[ ! -f "$OPENCLAW_BIN" ]]; then
+    echo "WARNING: openclaw binary not found at $OPENCLAW_BIN — skipping PATH fix" >&2
+    return 0
+  fi
+  ln -sf "$OPENCLAW_BIN" "$symlink"
+  chmod o+rx "$OPENCLAW_BIN" 2>/dev/null || true
+  # Ensure parent dirs are traversable
+  local dir
+  dir="$(dirname "$OPENCLAW_BIN")"
+  while [[ "$dir" != "/" && "$dir" != "." ]]; do
+    chmod o+x "$dir" 2>/dev/null || true
+    dir="$(dirname "$dir")"
+  done
+  echo "openclaw symlinked to $symlink"
+}
+
+# FIX #3: Create system-level gateway service for a user
+create_system_service() {
+  local u="$1"
+  local svc_file="/etc/systemd/system/openclaw-gateway@${u}.service"
+  local uid
+  uid="$(id -u "$u" 2>/dev/null || echo "0")"
+  # Assign a port: base + (uid mod 1000) to avoid collision
+  local port=$(( GATEWAY_PORT_BASE + (uid % 1000) ))
+  local node_bin
+  node_bin="$(command -v node 2>/dev/null || echo "/usr/bin/node")"
+  local openclaw_dist
+  openclaw_dist="$(dirname "$OPENCLAW_BIN")/index.js"
+
+  if [[ -f "$svc_file" ]]; then
+    echo "Service file $svc_file already exists, skipping creation."
+    return 0
+  fi
+
+  cat > "$svc_file" <<EOF
+[Unit]
+Description=OpenClaw Gateway for ${u}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=${u}
+ExecStart=${node_bin} ${openclaw_dist} gateway --port ${port}
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+TimeoutStartSec=30
+SuccessExitStatus=0 143
+KillMode=control-group
+Environment=HOME=/home/${u}
+Environment=TMPDIR=/tmp
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=OPENCLAW_GATEWAY_PORT=${port}
+Environment=OPENCLAW_SYSTEMD_UNIT=openclaw-gateway@${u}.service
+Environment=OPENCLAW_SERVICE_MARKER=openclaw
+Environment=OPENCLAW_SERVICE_KIND=gateway
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  systemctl daemon-reload
+  echo "Created service $svc_file (port $port)"
+
+  # Write port to user state so it's visible in status
+  echo "gateway_port=$port" >> "$(user_state_file "$u")"
+}
+
+# FIX #4: Slack config checkpoint — token-based, not OAuth login
 print_slack_checkpoint() {
   local u="$1"
-  local cmd
-  printf -v cmd "$SLACK_OAUTH_CMD_TEMPLATE" "$u"
   cat <<EOF
-CHECKPOINT: Slack OAuth required for $u
-Run EXACT command template:
-  $cmd
+CHECKPOINT: Slack token config required for $u
+
+Slack uses bot + app tokens (not OAuth login). Configure them with:
+
+  sudo -iu $u openclaw config set channels.slack.botToken "xoxb-..."
+  sudo -iu $u openclaw config set channels.slack.appToken "xapp-..."
+
+Prerequisites (complete these in https://api.slack.com/apps first):
+  1. Create app -> Enable Socket Mode -> copy App Token (xapp-...)
+  2. OAuth & Permissions -> install to workspace -> copy Bot Token (xoxb-...)
+  3. Required bot scopes: chat:write, im:read, im:write, channels:read, users:read
+  4. App Home -> Messages Tab -> enable + allow user messages
+
 Then confirm:
   sudo openclaw-userctl resume $u DONE
-If it fails and you need to retry same step:
-  sudo openclaw-userctl resume $u RETRY
+If it fails:
+  sudo openclaw-userctl resume $u RETRY "reason"
 EOF
 }
 
-print_cli_checkpoint() {
+# FIX #5: Health check checkpoint instead of interactive configure
+print_health_checkpoint() {
   local u="$1"
   local cmd
-  printf -v cmd "$CLI_AUTH_CMD_TEMPLATE" "$u"
+  printf -v cmd "$HEALTH_CHECK_CMD_TEMPLATE" "$u"
   cat <<EOF
-CHECKPOINT: OpenClaw CLI auth required for $u
-Run EXACT command template:
+CHECKPOINT: Gateway health verification required for $u
+
+Verify the gateway and Slack channel are up:
   $cmd
+
+Expected output includes: Slack: ok
 Then confirm:
   sudo openclaw-userctl resume $u DONE
-If it fails and you need to retry same step:
-  sudo openclaw-userctl resume $u RETRY
+If it fails:
+  sudo openclaw-userctl resume $u RETRY "reason"
 EOF
 }
 
@@ -219,15 +309,28 @@ cmd_add_user() {
     fi
   fi
 
+  # FIX #1: Ensure openclaw is in PATH for all users before proceeding
+  ensure_openclaw_path
+
+  # Create OS user if needed
   if ! id "$u" >/dev/null 2>&1; then
     run_cmd useradd --create-home --shell /bin/bash "$u"
   fi
 
+  # Enable systemd lingering so user services can persist
+  run_cmd loginctl enable-linger "$u" 2>/dev/null || true
+
   mkdir -p "$WORKSPACES_DIR/$u"
   set_user_state "$u" "pending_auth"
 
+  # Run openclaw setup for the new user
+  run_cmd sudo -iu "$u" openclaw setup 2>/dev/null || true
+
+  # FIX #3: Create system-level service file
+  create_system_service "$u"
+
   transition_onboarding "$u" "$PHASE_PROVISIONED" "in_progress" 0 "provisioning-complete"
-  transition_onboarding "$u" "$PHASE_WAIT_SLACK" "waiting_operator_action" 0 "awaiting-slack-oauth"
+  transition_onboarding "$u" "$PHASE_WAIT_SLACK" "waiting_operator_action" 0 "awaiting-slack-config"
 
   audit "ok" "add_user" "$u" "provisioned-awaiting-slack"
   echo "Provisioning complete for $u."
@@ -261,15 +364,26 @@ cmd_resume() {
   case "$action" in
     DONE)
       if [[ "$p" == "$PHASE_WAIT_SLACK" ]]; then
-        transition_onboarding "$u" "$PHASE_WAIT_CLI" "waiting_operator_action" "$r" "slack-complete-awaiting-cli"
-        audit "ok" "resume" "$u" "advanced-to-cli"
-        print_cli_checkpoint "$u"
+        transition_onboarding "$u" "$PHASE_WAIT_HEALTH" "waiting_operator_action" "$r" "slack-complete-awaiting-health"
+        audit "ok" "resume" "$u" "advanced-to-health-check"
+        # FIX #5: Health check checkpoint instead of configure
+        print_health_checkpoint "$u"
         return
       fi
-      if [[ "$p" == "$PHASE_WAIT_CLI" ]]; then
-        transition_onboarding "$u" "$PHASE_FINALIZING" "in_progress" "$r" "cli-complete-finalizing"
-        run_cmd systemctl enable "$(service_name_for "$u")"
-        run_cmd systemctl restart "$(service_name_for "$u")"
+      if [[ "$p" == "$PHASE_WAIT_HEALTH" ]]; then
+        transition_onboarding "$u" "$PHASE_FINALIZING" "in_progress" "$r" "health-ok-finalizing"
+
+        local svc
+        svc="$(service_name_for "$u")"
+
+        # FIX #6: Idempotent finalize — check if already active before enabling/restarting
+        if systemctl is-active --quiet "$svc" 2>/dev/null; then
+          echo "Service $svc already active — skipping enable/restart."
+        else
+          run_cmd systemctl enable "$svc"
+          run_cmd systemctl restart "$svc"
+        fi
+
         set_user_state "$u" "enabled"
         transition_onboarding "$u" "$PHASE_COMPLETE" "done" "$r" "onboarding-complete"
         audit "ok" "resume" "$u" "completed"
@@ -277,11 +391,11 @@ cmd_resume() {
         return
       fi
       audit "deny" "resume" "$u" "invalid-done-phase=$p"
-      echo "ERROR: DONE is only valid in phases: $PHASE_WAIT_SLACK, $PHASE_WAIT_CLI (current: $p)" >&2
+      echo "ERROR: DONE is only valid in phases: $PHASE_WAIT_SLACK, $PHASE_WAIT_HEALTH (current: $p)" >&2
       exit 10
       ;;
     RETRY)
-      if [[ "$p" != "$PHASE_WAIT_SLACK" && "$p" != "$PHASE_WAIT_CLI" ]]; then
+      if [[ "$p" != "$PHASE_WAIT_SLACK" && "$p" != "$PHASE_WAIT_HEALTH" ]]; then
         audit "deny" "resume" "$u" "invalid-retry-phase=$p"
         echo "ERROR: RETRY only valid at checkpoint phases (current: $p)" >&2
         exit 11
@@ -292,7 +406,7 @@ cmd_resume() {
       if [[ "$p" == "$PHASE_WAIT_SLACK" ]]; then
         print_slack_checkpoint "$u"
       else
-        print_cli_checkpoint "$u"
+        print_health_checkpoint "$u"
       fi
       ;;
     FAIL)
@@ -318,17 +432,26 @@ cmd_add() {
     exit 3
   fi
 
+  ensure_openclaw_path
+
   if ! id "$u" >/dev/null 2>&1; then
     run_cmd useradd --create-home --shell /bin/bash "$u"
   fi
 
+  run_cmd loginctl enable-linger "$u" 2>/dev/null || true
   mkdir -p "$WORKSPACES_DIR/$u"
+  run_cmd sudo -iu "$u" openclaw setup 2>/dev/null || true
+  create_system_service "$u"
   set_user_state "$u" "enabled"
 
   local svc
   svc="$(service_name_for "$u")"
-  run_cmd systemctl enable "$svc"
-  run_cmd systemctl restart "$svc"
+  if systemctl is-active --quiet "$svc" 2>/dev/null; then
+    echo "Service $svc already active."
+  else
+    run_cmd systemctl enable "$svc"
+    run_cmd systemctl restart "$svc"
+  fi
 
   transition_onboarding "$u" "$PHASE_COMPLETE" "done" 0 "legacy-add-complete"
   audit "ok" "add" "$u" "created-or-updated"
@@ -347,7 +470,7 @@ cmd_list() {
       ob_phase="${phase:-none}"
       ob_status="${status:-none}"
     fi
-    printf '%s\t%s\t%s\tonboarding=%s/%s\n' "$username" "$status" "$updatedAt" "$ob_phase" "$ob_status"
+    printf '%s\t%s\t%s\tonboarding=%s/%s\n' "$username" "${status:-?}" "${updatedAt:-?}" "$ob_phase" "$ob_status"
   done
   if [[ "$found" -eq 0 ]]; then
     echo "No managed users."
@@ -381,8 +504,8 @@ cmd_status() {
   local svc
   svc="$(service_name_for "$u")"
   echo "username: $username"
-  echo "status: $status"
-  echo "updatedAt: $updatedAt"
+  echo "status: ${status:-?}"
+  echo "updatedAt: ${updatedAt:-?}"
   echo "service: $svc"
   if read_onboarding_state "$u"; then
     echo "onboarding_phase: ${phase:-unknown}"
@@ -468,7 +591,14 @@ cmd_remove() {
   ts="$(date -u +%Y%m%dT%H%M%SZ)"
   archive_prefix="$ARCHIVE_DIR/$u-$ts"
 
-  run_cmd systemctl disable --now "$svc"
+  # Stop service if running (idempotent)
+  systemctl disable --now "$svc" 2>/dev/null || true
+  # Remove system service file
+  local svc_file="/etc/systemd/system/${svc}"
+  if [[ -f "$svc_file" ]]; then
+    rm -f "$svc_file"
+    systemctl daemon-reload
+  fi
 
   if [[ "$force" -eq 1 ]]; then
     rm -f "$state_file" "$ob_state_file"
@@ -483,12 +613,8 @@ cmd_remove() {
     echo "Removed $u (force-delete mode)"
   else
     mv "$state_file" "$archive_prefix.state"
-    if [[ -f "$ob_state_file" ]]; then
-      mv "$ob_state_file" "$archive_prefix.onboarding.state"
-    fi
-    if [[ -d "$WORKSPACES_DIR/$u" ]]; then
-      mv "$WORKSPACES_DIR/$u" "$archive_prefix.workspace"
-    fi
+    [[ -f "$ob_state_file" ]] && mv "$ob_state_file" "$archive_prefix.onboarding.state"
+    [[ -d "$WORKSPACES_DIR/$u" ]] && mv "$WORKSPACES_DIR/$u" "$archive_prefix.workspace"
     audit "ok" "remove" "$u" "archived=$archive_prefix"
     echo "Archived and removed $u from active orchestrator state (safe default)."
   fi
