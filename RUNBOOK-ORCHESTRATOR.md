@@ -16,7 +16,7 @@ Operate multiple OS-user OpenClaw accounts on one EC2 host with deterministic li
   - explicit deny list
 - Mutating commands require root (unless explicit test override).
 - Audit logging for all commands and outcomes.
-- Safe default remove mode keeps OS user data unless `--force` is used.
+- Safe default remove mode archives orchestrator state/workspace metadata unless `--force-delete` is used.
 
 ## Install (recommended)
 1. Copy script to root-owned path:
@@ -45,10 +45,10 @@ Operate multiple OS-user OpenClaw accounts on one EC2 host with deterministic li
   - `sudo openclaw-userctl restart --all`
 - Disable:
   - `sudo openclaw-userctl disable oc_alice`
-- Remove from orchestrator state only (safe default):
+- Remove with safe archive-first default:
   - `sudo openclaw-userctl remove oc_alice`
 - Force-remove OS user (destructive):
-  - `sudo openclaw-userctl remove oc_alice --force --purge-home`
+  - `sudo openclaw-userctl remove oc_alice --force-delete --purge-home`
 
 ## Audit Log
 Default: `/var/log/openclaw-orchestrator/audit.log`

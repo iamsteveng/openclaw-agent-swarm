@@ -25,20 +25,13 @@ pass() { echo "PASS: $*"; }
 fail() { echo "FAIL: $*"; exit 1; }
 
 expect_fail() {
-  local name="$1"
-  shift
-  if "$@" >/dev/null 2>&1; then
-    fail "$name expected failure"
-  fi
+  local name="$1"; shift
+  if "$@" >/dev/null 2>&1; then fail "$name expected failure"; fi
   pass "$name"
 }
-
 expect_ok() {
-  local name="$1"
-  shift
-  if ! "$@" >/dev/null 2>&1; then
-    fail "$name expected success"
-  fi
+  local name="$1"; shift
+  if ! "$@" >/dev/null 2>&1; then fail "$name expected success"; fi
   pass "$name"
 }
 
@@ -52,13 +45,18 @@ expect_ok "status managed user" "$CTL" status oc_alpha
 expect_ok "disable managed user" "$CTL" disable oc_alpha
 expect_ok "restart managed user" "$CTL" restart oc_alpha
 expect_ok "remove managed user safe default" "$CTL" remove oc_alpha
+ls "$ORCH_STATE_ROOT/archive"/oc_alpha-*.state >/dev/null 2>&1 || fail "safe remove should archive state"
+pass "safe remove archives state"
 
 expect_ok "add second user" "$CTL" add oc_beta
 expect_ok "restart all" "$CTL" restart --all
-expect_ok "remove with force" "$CTL" remove oc_beta --force
+expect_ok "remove with force-delete" "$CTL" remove oc_beta --force-delete
+[[ ! -f "$ORCH_STATE_ROOT/users/oc_beta.state" ]] || fail "force-delete should remove active state file"
+pass "force-delete removed state"
 
 [[ -f "$ORCH_LOG_DIR/audit.log" ]] || fail "audit log not created"
 grep -q 'cmd=add' "$ORCH_LOG_DIR/audit.log" || fail "audit log missing add entries"
+grep -q 'cmd=remove' "$ORCH_LOG_DIR/audit.log" || fail "audit log missing remove entries"
 pass "audit log populated"
 
 echo "All orchestrator userctl validations passed."

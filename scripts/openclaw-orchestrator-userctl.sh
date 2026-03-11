@@ -239,7 +239,7 @@ cmd_remove() {
   local force=0 purge_home=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --force) force=1 ;;
+      --force|--force-delete) force=1 ;;
       --purge-home) purge_home=1 ;;
       *) echo "ERROR: unknown remove option '$1'" >&2; exit 6 ;;
     esac
@@ -252,12 +252,16 @@ cmd_remove() {
     exit 4
   fi
 
-  local svc
+  local svc state_file ts archive_prefix
   svc="$(service_name_for "$u")"
+  state_file="$(user_state_file "$u")"
+  ts="$(date -u +%Y%m%dT%H%M%SZ)"
+  archive_prefix="$ARCHIVE_DIR/$u-$ts"
+
   run_cmd systemctl disable --now "$svc"
-  rm -f "$(user_state_file "$u")"
 
   if [[ "$force" -eq 1 ]]; then
+    rm -f "$state_file"
     if id "$u" >/dev/null 2>&1; then
       if [[ "$purge_home" -eq 1 ]]; then
         run_cmd userdel -r "$u"
@@ -265,11 +269,15 @@ cmd_remove() {
         run_cmd userdel "$u"
       fi
     fi
-    audit "ok" "remove" "$u" "force=$force purge_home=$purge_home"
-    echo "Removed $u (force mode)"
+    audit "ok" "remove" "$u" "force-delete purge_home=$purge_home"
+    echo "Removed $u (force-delete mode)"
   else
-    audit "ok" "remove" "$u" "state-only"
-    echo "Removed $u from orchestrator state. OS user kept (safe default)."
+    mv "$state_file" "$archive_prefix.state"
+    if [[ -d "$WORKSPACES_DIR/$u" ]]; then
+      mv "$WORKSPACES_DIR/$u" "$archive_prefix.workspace"
+    fi
+    audit "ok" "remove" "$u" "archived=$archive_prefix"
+    echo "Archived and removed $u from active orchestrator state (safe default)."
   fi
 }
 

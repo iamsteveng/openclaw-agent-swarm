@@ -10,7 +10,6 @@ Reusable baseline for running a **replicable, delegation-first OpenClaw setup** 
 - Heartbeat + cron guidance so each instance can run proactive checks without noise
 - A quick-start setup flow for new machines
 - Multi-user orchestrator lifecycle wrapper with guardrails (`scripts/openclaw-orchestrator-userctl.sh`)
-- Root-owned orchestrator user lifecycle wrapper with guardrails (`scripts/openclaw-orchestrator-userctl`)
 
 ## Quick Start
 
@@ -31,7 +30,7 @@ See `REPLICATE.md` for full replication instructions.
 
 New wrapper script for deterministic user lifecycle operations:
 
-- `scripts/openclaw-orchestrator-userctl.sh`
+- Wrapper: `scripts/openclaw-orchestrator-userctl.sh`
 - Runbook: `RUNBOOK-ORCHESTRATOR.md`
 - Validation: `scripts/validate-orchestrator-userctl.sh`
 
@@ -41,27 +40,15 @@ Lifecycle commands:
 - `status [username]`
 - `restart <username|--all>`
 - `disable <username>`
-- `remove <username> [--force] [--purge-home]`
+- `remove <username> [--force-delete] [--purge-home]`
 
 Guardrails:
-- Username allowlist + deny list policy
-- No arbitrary shell passthrough
-- Audit logging for all actions
-- Safe remove default keeps OS user data
-
-## Orchestrator User Lifecycle Wrapper
-
-Use `scripts/openclaw-orchestrator-userctl` to manage orchestrator-controlled OS users with deterministic lifecycle actions:
-
-- `add`, `list`, `status`, `restart`, `disable`, `remove`
-- strict username allowlist + forbidden list
+- strict username allowlist + deny list
+- no arbitrary shell passthrough
 - append-only audit log output
 - safe archive-first removal by default
 
-Full runbook + examples: `docs/orchestrator-userctl.md`
-
-Validation script:
-
+Validation:
 ```bash
 ./scripts/validate-orchestrator-userctl.sh
 ```
