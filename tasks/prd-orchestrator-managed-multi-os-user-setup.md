@@ -8,13 +8,14 @@ Provide a deterministic, root-owned orchestration pattern to manage multiple OS-
 
 ## Scope (MVP)
 - Add root-owned wrapper command for lifecycle actions:
-  - `add`, `list`, `status`, `restart`, `disable`, `remove`
+  - `add`, `add_user`, `resume`, `list`, `status`, `restart`, `disable`, `remove`
+- Add skill-layer execution contract for Telegram with magic phrase `USERCTL LIFECYCLE`.
 - Restrict managed usernames by explicit allowlist policy.
 - Avoid arbitrary shell passthrough (fixed subcommands only).
-- Add append-only audit logging for all lifecycle actions.
-- Add safe defaults (disabled-by-default on create optional, explicit confirmation gates).
-- Add operator docs/runbook with security constraints.
-- Add validation script(s) for command routing and policy enforcement.
+- Add append-only audit logging for all lifecycle actions and phase transitions.
+- Add safe defaults (archive-first remove, explicit confirmation gates for destructive operations).
+- Add operator docs/runbook + skill docs with security constraints.
+- Add validation script(s) for command routing, onboarding transitions, and policy enforcement.
 
 ## Non-Goals
 - Full IAM/SSO integration

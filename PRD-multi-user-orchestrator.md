@@ -3,6 +3,11 @@
 ## Problem
 Running multiple OpenClaw accounts on one EC2 host is currently ad-hoc, hard to audit, and risky when using unrestricted shell commands.
 
+## Delivery Process Intent (Ralph PRD + Ralph Loop)
+- Plan changes in PRD first, then implement docs/scripts in small deterministic increments.
+- Use Ralph loop when stable in environment; if tool instability occurs, execute direct implementation while preserving PRD intent and documenting blocker in PR notes.
+- Keep PRD, skill contract, runbook, and wrapper behavior in lockstep.
+
 ## Goal
 Provide a deterministic, root-owned orchestration pattern to manage multiple OS-user OpenClaw accounts safely.
 
@@ -14,11 +19,12 @@ Provide a deterministic, root-owned orchestration pattern to manage multiple OS-
 ## Scope (MVP)
 - Add root-owned wrapper command for lifecycle actions:
   - `add`, `add_user`, `resume`, `list`, `status`, `restart`, `disable`, `remove`
+- Add chat-facing skill layer for safe Telegram invocation with explicit magic trigger phrase.
 - Restrict managed usernames by explicit allowlist policy.
 - Avoid arbitrary shell passthrough (fixed subcommands only).
 - Add append-only audit logging for all lifecycle actions + onboarding phase transitions.
 - Add deterministic onboarding state files per user with pause/resume checkpoints.
-- Add operator docs/runbook with security constraints and exact command flow.
+- Add operator docs/runbook + skill docs with security constraints and exact command flow.
 - Add validation script(s) for pause/resume/status transitions.
 
 ## Non-Goals
@@ -109,6 +115,12 @@ Invalid transitions fail closed and are audited.
    - Stable state directory for managed metadata.
    - Idempotent operations where possible.
    - Explicit `--force` required for destructive remove mode.
+6. **Skill-layer execution contract (Telegram)**
+   - Execution requires explicit magic phrase: `USERCTL LIFECYCLE`.
+   - Parse only supported command grammar and arguments from SKILL.md.
+   - Fail closed on ambiguity, unknown flags, or out-of-scope requests.
+   - Require explicit confirmation before mutating operations.
+   - Require double confirmation for destructive remove mode (`--force-delete`, optional `--purge-home`).
 
 ## Technical Approach
 - `scripts/openclaw-orchestrator-userctl.sh` (bash strict mode).
@@ -149,5 +161,6 @@ Invalid transitions fail closed and are audited.
 
 ## Deliverables
 - Updated wrapper script + policy template
-- Updated PRD/runbook/README for hybrid onboarding
+- Updated PRD/runbook/README for hybrid onboarding + magic trigger phrase
+- New skill doc: `skills/openclaw-userctl/SKILL.md` with deterministic command grammar
 - Validation script covering pause/resume + state transitions

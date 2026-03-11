@@ -5,6 +5,8 @@ Operate multiple OS-user OpenClaw accounts on one EC2 host with deterministic li
 
 ## Components
 - Wrapper: `scripts/openclaw-orchestrator-userctl.sh`
+- Installed command path: `/usr/local/sbin/openclaw-userctl`
+- Skill contract: `skills/openclaw-userctl/SKILL.md`
 - Policy template: `scripts/orchestrator-policy.env.example`
 - Validation: `scripts/validate-orchestrator-userctl.sh`
 
@@ -18,6 +20,16 @@ Operate multiple OS-user OpenClaw accounts on one EC2 host with deterministic li
 - Audit logging for all commands, outcomes, and onboarding phase transitions.
 - Guided checkpoints use fixed command templates only.
 - Safe default remove mode archives orchestrator state/workspace metadata unless `--force-delete` is used.
+
+## Telegram Skill Trigger (Magic Phrase)
+For chat-driven execution, require exact trigger phrase:
+- `USERCTL LIFECYCLE`
+
+Execution policy from `skills/openclaw-userctl/SKILL.md`:
+- no trigger phrase -> reject
+- unknown/ambiguous/out-of-scope request -> reject
+- mutating commands -> explicit confirmation
+- destructive remove flags (`--force-delete`, `--purge-home`) -> double confirmation
 
 ## Install (recommended)
 1. Copy script to root-owned path:

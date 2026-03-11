@@ -31,6 +31,8 @@ See `REPLICATE.md` for full replication instructions.
 New wrapper script for deterministic user lifecycle operations:
 
 - Wrapper: `scripts/openclaw-orchestrator-userctl.sh`
+- Installed command path: `/usr/local/sbin/openclaw-userctl`
+- Skill contract: `skills/openclaw-userctl/SKILL.md`
 - Runbook: `RUNBOOK-ORCHESTRATOR.md`
 - Validation: `scripts/validate-orchestrator-userctl.sh`
 
@@ -49,6 +51,7 @@ Guardrails:
 - no arbitrary shell passthrough
 - append-only audit log output
 - safe archive-first removal by default
+- Telegram skill trigger phrase required: `USERCTL LIFECYCLE`
 
 Validation:
 ```bash
