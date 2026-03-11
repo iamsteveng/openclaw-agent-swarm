@@ -1,3 +1,8 @@
+---
+name: openclaw-userctl
+description: Safe Telegram-triggered lifecycle control for managed OpenClaw OS users via fixed openclaw-userctl commands.
+---
+
 # SKILL: openclaw-userctl lifecycle orchestration (Telegram-safe)
 
 ## Purpose
@@ -30,6 +35,42 @@ Mapped to fixed subcommands only:
 - `remove`
 
 No arbitrary shell, no extra subcommands, no command chaining.
+
+---
+
+## Command Catalog (what each command is for, and when to use)
+
+### `add <username>`
+- **For:** Immediate legacy add flow (non-staged provisioning path).
+- **Use when:** You need backward-compatible behavior and do not need guided pause/resume checkpoints.
+
+### `add_user <username>`
+- **For:** Staged hybrid onboarding (Option A + C): auto provisioning + guided checkpoint flow.
+- **Use when:** Onboarding a new teammate end-to-end via orchestrator with Slack/CLI checkpoint confirmations.
+
+### `resume <username> <DONE|RETRY|FAIL> [reason...]`
+- **For:** Advancing or controlling a paused staged onboarding.
+- **Use when:** A checkpoint prompt has been issued and you are confirming completion (`DONE`), retrying (`RETRY`), or terminating (`FAIL`).
+
+### `list`
+- **For:** Showing managed users under orchestrator control.
+- **Use when:** You need a quick inventory of provisioned users and their high-level state.
+
+### `status [username]`
+- **For:** Reading lifecycle and service status.
+- **Use when:** You want current onboarding/service state for all users or one specific user.
+
+### `restart <username>` / `restart --all`
+- **For:** Restarting one or all managed OpenClaw user services.
+- **Use when:** After config updates, failed health checks, or operational recovery.
+
+### `disable <username>`
+- **For:** Stopping and disabling a user’s service without full removal.
+- **Use when:** Temporarily offboarding or suspending access while preserving user state.
+
+### `remove <username> [--force-delete] [--purge-home]`
+- **For:** Offboarding/removal of a managed user.
+- **Use when:** You want to retire an account; default is safe/archival behavior, destructive cleanup only with explicit force flags.
 
 ---
 
@@ -159,17 +200,3 @@ Standard rejection format:
 - `USERCTL LIFECYCLE remove oc_maria --delete-now`
 - `USERCTL LIFECYCLE run 'systemctl daemon-reload && ...'`
 - `USERCTL LIFECYCLE edit /etc/openclaw-orchestrator/policy.env`
-
----
-
-## Ralph PRD + Loop Intent
-- This skill operationalizes PRD constraints into an execution grammar suitable for chat orchestration.
-- Keep this file in lockstep with:
-  - `PRD-multi-user-orchestrator.md`
-  - `RUNBOOK-ORCHESTRATOR.md`
-  - wrapper behavior in `scripts/openclaw-orchestrator-userctl.sh`
-- Any new wrapper subcommand/flag requires:
-  1) PRD update,
-  2) SKILL.md update,
-  3) runbook/README update,
-  4) validation coverage update.
