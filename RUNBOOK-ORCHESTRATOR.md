@@ -49,10 +49,12 @@ Execution policy from `skills/openclaw-userctl/SKILL.md`:
 1. Start staged onboarding:
    - `sudo openclaw-userctl add_user oc_alice`
 2. Script pauses at Slack OAuth checkpoint and prints the fixed command template.
-3. Operator runs the printed Slack auth command, then resumes:
+3. Operator runs the Slack channel login command, then resumes:
+   - `sudo -iu oc_alice openclaw channels login --channel slack`
    - `sudo openclaw-userctl resume oc_alice DONE`
 4. Script pauses at CLI auth checkpoint and prints the fixed command template.
-5. Operator runs the printed CLI auth command, then resumes:
+5. Operator runs the CLI configure command, then resumes:
+   - `sudo -iu oc_alice openclaw configure`
    - `sudo openclaw-userctl resume oc_alice DONE`
 6. Script finalizes service enable/restart and marks onboarding complete.
 
