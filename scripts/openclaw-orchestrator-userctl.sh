@@ -271,7 +271,7 @@ try_auto_create_slack_app() {
 print_slack_checkpoint() {
   local u="$1"
   local display_name="${u#oc_}"  # strip oc_ prefix for display
-  local app_name="OpenClaw - ${display_name}"
+  local app_name="OpenClaw Agent - ${display_name}"
 
   cat <<EOF
 CHECKPOINT: Slack app + token config required for $u

@@ -71,7 +71,7 @@ SLACK_CONFIG_TOKEN="${ORCH_SLACK_CONFIG_TOKEN:-}"
 [[ -n "$SLACK_CONFIG_TOKEN" ]] || die "ORCH_SLACK_CONFIG_TOKEN not set in $POLICY_FILE"
 
 DISPLAY_NAME="${USERNAME#oc_}"
-APP_NAME="OpenClaw - ${DISPLAY_NAME}"
+APP_NAME="OpenClaw Agent - ${DISPLAY_NAME}"
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  Slack App Creator for: $USERNAME"
