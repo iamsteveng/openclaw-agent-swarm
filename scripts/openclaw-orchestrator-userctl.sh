@@ -415,21 +415,6 @@ cmd_add_user() {
   # Run openclaw setup for the new user
   run_cmd sudo -iu "$u" openclaw setup 2>/dev/null || true
 
-  # Block admin-only skills from user agent gateway
-  sudo python3 -c "
-import json, sys
-cfg_path = '/home/$u/.openclaw/openclaw.json'
-try:
-    with open(cfg_path) as f:
-        cfg = json.load(f)
-    cfg.setdefault('commands', {})['nativeSkillsDenylist'] = ['openclaw-userctl']
-    with open(cfg_path, 'w') as f:
-        json.dump(cfg, f, indent=2)
-    print('skills denylist applied')
-except Exception as e:
-    print('warn: could not apply denylist:', e, file=sys.stderr)
-" 2>/dev/null || true
-
   # Apply MVP workspace template if repo is available
   local repo_dir
   repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
