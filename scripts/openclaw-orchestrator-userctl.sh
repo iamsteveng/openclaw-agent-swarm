@@ -477,6 +477,18 @@ cmd_add_user() {
   # Set default model to sonnet
   sudo -iu "$u" openclaw config set agents.defaults.model "anthropic/claude-sonnet-4-6" 2>/dev/null || true
 
+  # Copy Anthropic auth profiles from admin user so API key is available
+  local auth_src="/home/ubuntu/.openclaw/agents/main/agent/auth-profiles.json"
+  local auth_dst="/home/$u/.openclaw/agents/main/agent"
+  if [[ -f "$auth_src" ]]; then
+    mkdir -p "$auth_dst"
+    cp "$auth_src" "$auth_dst/auth-profiles.json"
+    chown -R "$u:$u" "/home/$u/.openclaw/agents"
+    echo "  Auth profiles copied for $u."
+  else
+    echo "  WARNING: auth-profiles.json not found at $auth_src — user will need manual API key setup."
+  fi
+
   # Apply MVP workspace template if repo is available
   local repo_dir
   repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
