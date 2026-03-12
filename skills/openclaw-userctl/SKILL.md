@@ -1,9 +1,12 @@
 ---
 name: openclaw-userctl
 description: Safe Telegram-triggered lifecycle control for managed OpenClaw OS users via fixed openclaw-userctl commands.
+restrict_to: admin-agent
 ---
 
 # SKILL: openclaw-userctl lifecycle orchestration (Telegram-safe)
+
+> ⚠️ **ADMIN ONLY** — This skill is restricted to the admin agent (ubuntu/main). User agents (oc_*) must never load or execute this skill. If you are running as a user agent, ignore this skill entirely.
 
 ## Purpose
 This skill is the **only** chat-facing interface for managed OpenClaw user lifecycle operations.
