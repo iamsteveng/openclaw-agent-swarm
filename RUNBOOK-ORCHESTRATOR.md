@@ -58,17 +58,39 @@ sudo chmod o+x /home/ubuntu/.npm-global /home/ubuntu/.npm-global/bin
 ```
 
 ## Install (recommended)
-1. Copy script to root-owned path:
-   - `sudo install -o root -g root -m 0750 scripts/openclaw-orchestrator-userctl.sh /usr/local/sbin/openclaw-userctl`
-2. Create policy directory and file:
-   - `sudo mkdir -p /etc/openclaw-orchestrator`
-   - `sudo cp scripts/orchestrator-policy.env.example /etc/openclaw-orchestrator/policy.env`
-   - `sudo chown root:root /etc/openclaw-orchestrator/policy.env`
-   - `sudo chmod 0640 /etc/openclaw-orchestrator/policy.env`
-3. Review and edit `/etc/openclaw-orchestrator/policy.env` — set `ORCH_OPENCLAW_BIN` to your actual openclaw path.
-4. Ensure state/log directories:
-   - `/var/lib/openclaw-orchestrator`
-   - `/var/log/openclaw-orchestrator`
+1. Copy wrapper script to root-owned path:
+   ```bash
+   sudo install -o root -g root -m 0750 scripts/openclaw-orchestrator-userctl.sh /usr/local/sbin/openclaw-userctl
+   ```
+2. Install the skill into the admin agent's native skill set:
+   ```bash
+   sudo cp -r skills/openclaw-userctl /path/to/openclaw/skills/
+   ```
+   Find your openclaw skills path with: `openclaw --version` then check `$(npm root -g)/openclaw/skills/`
+   > ⚠️ Never edit files directly in node_modules. Always edit `skills/openclaw-userctl/SKILL.md` in this repo, then re-run this copy command to apply changes.
+
+3. Create policy directory and file:
+   ```bash
+   sudo mkdir -p /etc/openclaw-orchestrator
+   sudo cp scripts/orchestrator-policy.env.example /etc/openclaw-orchestrator/policy.env
+   sudo chown root:root /etc/openclaw-orchestrator/policy.env
+   sudo chmod 0640 /etc/openclaw-orchestrator/policy.env
+   ```
+4. Review and edit `/etc/openclaw-orchestrator/policy.env` — set `ORCH_OPENCLAW_BIN` to your actual openclaw path.
+5. Ensure state/log directories:
+   ```bash
+   sudo mkdir -p /var/lib/openclaw-orchestrator /var/log/openclaw-orchestrator
+   ```
+
+### Updating the skill
+When `skills/openclaw-userctl/SKILL.md` is changed in this repo, reinstall to apply:
+```bash
+sudo cp -r skills/openclaw-userctl $(npm root -g)/openclaw/skills/
+```
+Then restart the admin gateway to pick up the change:
+```bash
+openclaw gateway restart   # or: systemctl --user restart openclaw-gateway.service
+```
 
 ## Hybrid Onboarding Flow (Option A + C)
 
