@@ -251,6 +251,65 @@ EOF
 }
 
 # Auto-create Slack app if config token is set
+send_slack_greeting() {
+  local u="$1"
+  local cfg="/home/$u/.openclaw/openclaw.json"
+  if [[ ! -f "$cfg" ]]; then return 1; fi
+
+  # Extract bot token and Slack user ID from config
+  local bot_token slack_user_id
+  bot_token="$(python3 -c "
+import json
+with open('$cfg') as f: c = json.load(f)
+ch = c.get('channels', {}).get('slack', {})
+print(ch.get('botToken', ''))
+" 2>/dev/null)"
+  slack_user_id="$(python3 -c "
+import json
+with open('$cfg') as f: c = json.load(f)
+ch = c.get('channels', {}).get('slack', {})
+af = ch.get('allowFrom', ch.get('dm', {}).get('allowFrom', []))
+print(af[0] if af else '')
+" 2>/dev/null)"
+
+  if [[ -z "$bot_token" || ! "$bot_token" == xoxb-* || -z "$slack_user_id" ]]; then
+    echo "  (greeting skipped — bot token or Slack user ID not available)"
+    return 0
+  fi
+
+  local display_name="${u#oc_}"
+  local greeting="Hey 👋 I'm your OpenClaw Agent. Steve has set me up for you — feel free to DM me anytime!"
+
+  # Open DM channel
+  local dm_resp channel
+  dm_resp="$(curl -s -X POST https://slack.com/api/conversations.open \
+    -H "Authorization: Bearer $bot_token" \
+    -H "Content-Type: application/json" \
+    -d "{\"users\": \"$slack_user_id\"}")"
+  channel="$(echo "$dm_resp" | python3 -c "import json,sys; print(json.load(sys.stdin).get('channel',{}).get('id',''))" 2>/dev/null)"
+
+  if [[ -z "$channel" ]]; then
+    echo "  (greeting skipped — could not open DM channel)"
+    return 0
+  fi
+
+  # Post greeting message
+  local send_resp ok
+  send_resp="$(curl -s -X POST https://slack.com/api/chat.postMessage \
+    -H "Authorization: Bearer $bot_token" \
+    -H "Content-Type: application/json" \
+    -d "{\"channel\": \"$channel\", \"text\": \"$greeting\"}")"
+  ok="$(echo "$send_resp" | python3 -c "import json,sys; print(json.load(sys.stdin).get('ok','false'))" 2>/dev/null)"
+
+  if [[ "$ok" == "true" || "$ok" == "True" ]]; then
+    echo "  ✓ Greeting DM sent to $slack_user_id"
+  else
+    local err
+    err="$(echo "$send_resp" | python3 -c "import json,sys; print(json.load(sys.stdin).get('error','unknown'))" 2>/dev/null)"
+    echo "  (greeting failed: $err)"
+  fi
+}
+
 try_auto_create_slack_app() {
   local u="$1"
   local token="${ORCH_SLACK_CONFIG_TOKEN:-}"
@@ -415,6 +474,9 @@ cmd_add_user() {
   # Run openclaw setup for the new user
   run_cmd sudo -iu "$u" openclaw setup 2>/dev/null || true
 
+  # Set default model to sonnet
+  sudo -iu "$u" openclaw config set agents.defaults.model "anthropic/claude-sonnet-4-6" 2>/dev/null || true
+
   # Apply MVP workspace template if repo is available
   local repo_dir
   repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -494,6 +556,10 @@ cmd_resume() {
         transition_onboarding "$u" "$PHASE_COMPLETE" "done" "$r" "onboarding-complete"
         audit "ok" "resume" "$u" "completed"
         echo "Onboarding complete for $u"
+
+        # Send greeting DM via Slack bot
+        send_slack_greeting "$u" || true
+
         return
       fi
       audit "deny" "resume" "$u" "invalid-done-phase=$p"
