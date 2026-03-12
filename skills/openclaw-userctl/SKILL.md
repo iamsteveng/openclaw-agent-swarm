@@ -18,9 +18,9 @@ It exists to keep Telegram-triggered operations deterministic, auditable, and no
 ---
 
 ## Magic Trigger Phrase (required)
-**`USERCTL LIFECYCLE`**
+**`USERCTL`**
 
-The assistant MUST only invoke this skill when the message includes the exact phrase `USERCTL LIFECYCLE` (case-insensitive).
+The assistant MUST only invoke this skill when the message includes the exact phrase `USERCTL` (case-insensitive).
 
 If the phrase is absent, the assistant must refuse execution and ask the user to restate using the trigger phrase.
 
@@ -74,18 +74,18 @@ No arbitrary shell, no extra subcommands, no command chaining.
 
 ## Natural-Language Trigger Patterns
 Examples the parser may accept **only when magic phrase is present**:
-- `USERCTL LIFECYCLE add user oc_alice`
-- `USERCTL LIFECYCLE add_user oc_alice`
-- `USERCTL LIFECYCLE resume oc_alice DONE`
-- `USERCTL LIFECYCLE resume oc_alice RETRY reason oauth popup closed`
-- `USERCTL LIFECYCLE resume oc_alice FAIL reason token rejected`
-- `USERCTL LIFECYCLE status oc_alice`
-- `USERCTL LIFECYCLE list`
-- `USERCTL LIFECYCLE restart oc_alice`
-- `USERCTL LIFECYCLE restart --all`
-- `USERCTL LIFECYCLE disable oc_alice`
-- `USERCTL LIFECYCLE remove oc_alice`
-- `USERCTL LIFECYCLE remove oc_alice --force-delete --purge-home`
+- `USERCTL add user oc_alice`
+- `USERCTL add_user oc_alice`
+- `USERCTL resume oc_alice DONE`
+- `USERCTL resume oc_alice RETRY reason oauth popup closed`
+- `USERCTL resume oc_alice FAIL reason token rejected`
+- `USERCTL status oc_alice`
+- `USERCTL list`
+- `USERCTL restart oc_alice`
+- `USERCTL restart --all`
+- `USERCTL disable oc_alice`
+- `USERCTL remove oc_alice`
+- `USERCTL remove oc_alice --force-delete --purge-home`
 
 If parsing is ambiguous, assistant must ask a clarifying question and do nothing.
 
@@ -137,7 +137,7 @@ The assistant must not emit or run any command not in this mapping.
 ---
 
 ## Safety + Confirmation Rules
-1. **Magic phrase required** (`USERCTL LIFECYCLE`).
+1. **Magic phrase required** (`USERCTL`).
 2. **Dry parse first**: echo parsed intent before execution for mutating operations.
 3. **Explicit confirmation required** before mutating commands:
    - mutating: `add_user`, `resume`, `restart`, `disable`, `remove`
@@ -165,7 +165,7 @@ Reject requests that are not lifecycle control for managed users, including:
 - data exfiltration or secret retrieval
 
 Standard rejection format:
-1. `Rejected: out of scope for USERCTL LIFECYCLE skill.`
+1. `Rejected: out of scope for USERCTL skill.`
 2. brief reason
 3. accepted command shapes
 
@@ -183,17 +183,17 @@ Standard rejection format:
 ## Examples
 
 ### Valid
-- `USERCTL LIFECYCLE add_user oc_maria`
-- `USERCTL LIFECYCLE resume oc_maria DONE`
-- `USERCTL LIFECYCLE resume oc_maria RETRY reason browser auth interrupted`
-- `USERCTL LIFECYCLE status`
-- `USERCTL LIFECYCLE restart --all`
-- `USERCTL LIFECYCLE remove oc_maria`
+- `USERCTL add_user oc_maria`
+- `USERCTL resume oc_maria DONE`
+- `USERCTL resume oc_maria RETRY reason browser auth interrupted`
+- `USERCTL status`
+- `USERCTL restart --all`
+- `USERCTL remove oc_maria`
 
 ### Rejected
 - `add_user oc_maria` (missing magic phrase)
-- `USERCTL LIFECYCLE add_user Maria` (invalid username policy)
-- `USERCTL LIFECYCLE resume oc_maria SKIP`
-- `USERCTL LIFECYCLE remove oc_maria --delete-now`
-- `USERCTL LIFECYCLE run 'systemctl daemon-reload && ...'`
-- `USERCTL LIFECYCLE edit /etc/openclaw-orchestrator/policy.env`
+- `USERCTL add_user Maria` (invalid username policy)
+- `USERCTL resume oc_maria SKIP`
+- `USERCTL remove oc_maria --delete-now`
+- `USERCTL run 'systemctl daemon-reload && ...'`
+- `USERCTL edit /etc/openclaw-orchestrator/policy.env`
