@@ -250,22 +250,94 @@ EOF
   echo "gateway_port=$port" >> "$(user_state_file "$u")"
 }
 
-# FIX #4: Slack config checkpoint — token-based, not OAuth login
+# FIX #4: Slack config checkpoint — token-based with manifest import
 print_slack_checkpoint() {
   local u="$1"
+  local display_name="${u#oc_}"  # strip oc_ prefix for display
+  local app_name="OpenClaw - ${display_name}"
+
   cat <<EOF
-CHECKPOINT: Slack token config required for $u
+CHECKPOINT: Slack app + token config required for $u
 
-Slack uses bot + app tokens (not OAuth login). Configure them with:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 1 — Create Slack app via manifest import (fastest method)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  1. Go to https://api.slack.com/apps
+  2. Click "Create New App" → "From a manifest"
+  3. Select your workspace
+  4. Paste this manifest JSON:
 
+$(cat <<MANIFEST
+{
+  "display_information": {
+    "name": "${app_name}"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "${app_name}",
+      "always_online": true
+    },
+    "app_home": {
+      "messages_tab_enabled": true,
+      "messages_tab_read_only_enabled": false
+    }
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": [
+        "chat:write",
+        "im:history",
+        "im:read",
+        "im:write",
+        "channels:read",
+        "channels:history",
+        "groups:history",
+        "mpim:history",
+        "mpim:read",
+        "mpim:write",
+        "users:read",
+        "app_mentions:read",
+        "reactions:read",
+        "reactions:write",
+        "files:read",
+        "files:write"
+      ]
+    }
+  },
+  "settings": {
+    "socket_mode_enabled": true,
+    "event_subscriptions": {
+      "bot_events": [
+        "app_mention",
+        "message.channels",
+        "message.groups",
+        "message.im",
+        "message.mpim",
+        "reaction_added",
+        "reaction_removed"
+      ]
+    }
+  }
+}
+MANIFEST
+)
+
+  5. Click "Create" → "Install to Workspace" → allow
+  6. Copy the Bot Token (xoxb-...) from OAuth & Permissions
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 2 — Generate App Token (Socket Mode)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  1. In your new app → Settings → Basic Information
+  2. Scroll to "App-Level Tokens" → "Generate Token and Scopes"
+  3. Name it anything, add scope: connections:write
+  4. Copy the App Token (xapp-...)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 3 — Configure tokens for $u
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   sudo -iu $u openclaw config set channels.slack.botToken "xoxb-..."
   sudo -iu $u openclaw config set channels.slack.appToken "xapp-..."
-
-Prerequisites (complete these in https://api.slack.com/apps first):
-  1. Create app -> Enable Socket Mode -> copy App Token (xapp-...)
-  2. OAuth & Permissions -> install to workspace -> copy Bot Token (xoxb-...)
-  3. Required bot scopes: chat:write, im:read, im:write, channels:read, users:read
-  4. App Home -> Messages Tab -> enable + allow user messages
 
 Then confirm:
   sudo openclaw-userctl resume $u DONE
@@ -325,6 +397,15 @@ cmd_add_user() {
 
   # Run openclaw setup for the new user
   run_cmd sudo -iu "$u" openclaw setup 2>/dev/null || true
+
+  # Apply MVP workspace template if repo is available
+  local repo_dir
+  repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  if [[ -f "$repo_dir/scripts/apply-mvp-v1.sh" ]]; then
+    run_cmd bash "$repo_dir/scripts/apply-mvp-v1.sh" "/home/$u/.openclaw/workspace" 2>/dev/null || true
+    echo "MVP workspace template applied for $u."
+    echo "ACTION REQUIRED: Customize /home/$u/.openclaw/workspace/USER.md with $u's name, role, and Slack user ID."
+  fi
 
   # FIX #3: Create system-level service file
   create_system_service "$u"

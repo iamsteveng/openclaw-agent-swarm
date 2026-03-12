@@ -31,21 +31,23 @@ Execution policy from `skills/openclaw-userctl/SKILL.md`:
 - mutating commands -> explicit confirmation
 - destructive remove flags (`--force-delete`, `--purge-home`) -> double confirmation
 
+## Architecture: One Slack App Per User
+
+Each team member gets their **own dedicated Slack app** (individual bot), connected to their own OS user gateway. This is by design — see `DESIGN-DECISIONS.md` for full rationale.
+
+**Why not a shared Slack bot?** Slack Socket Mode is outbound-only (gateway → Slack WebSocket). There is no inbound HTTP endpoint to proxy. A shared bot with per-user routing would require reimplementing OpenClaw's Slack internals — fragile and unsupported. Individual bots are simpler, more isolated, and more resilient.
+
+The `add_user` checkpoint prints a pre-filled **Slack app manifest** you can import in one step — no manual scope configuration needed.
+
 ## Prerequisites
 
-### Slack App Setup (required before onboarding Slack users)
-Complete these steps at https://api.slack.com/apps **before** running `add_user`:
-
-1. **Create app** → From scratch → give it a name + workspace
-2. **Enable Socket Mode** → App Settings → Socket Mode → toggle On → generate App Token with scope `connections:write` → copy `xapp-...` token
-3. **OAuth & Permissions** → Add Bot Token Scopes:
-   - `chat:write`
-   - `im:read`
-   - `im:write`
-   - `channels:read`
-   - `users:read`
-4. **Install to Workspace** → copy `xoxb-...` Bot Token
-5. **App Home** → Messages Tab → enable → check **"Allow users to send Slash commands and messages from the messages tab"**
+### openclaw binary (auto-handled by script)
+The `add_user` command automatically ensures `/usr/local/bin/openclaw` is symlinked and world-executable. Manual fix if needed:
+```bash
+sudo ln -sf /home/ubuntu/.npm-global/bin/openclaw /usr/local/bin/openclaw
+sudo chmod o+rx /usr/local/bin/openclaw
+sudo chmod o+x /home/ubuntu/.npm-global /home/ubuntu/.npm-global/bin
+```
 
 ### openclaw binary (auto-handled by script)
 The `add_user` command automatically ensures `/usr/local/bin/openclaw` is symlinked and world-executable. Manual fix if needed:
@@ -71,29 +73,37 @@ sudo chmod o+x /home/ubuntu/.npm-global /home/ubuntu/.npm-global/bin
 ## Hybrid Onboarding Flow (Option A + C)
 
 ### What `add_user` does automatically
-- Ensures `openclaw` is in PATH for all users (FIX: symlink + permissions)
+- Ensures `openclaw` is in PATH for all users (symlink + permissions)
 - Creates OS user if needed (`useradd`)
 - Enables systemd lingering for the user
 - Runs `openclaw setup` for the new user
+- Applies MVP workspace template (`apply-mvp-v1.sh`) to user's workspace
 - Creates system-level service file at `/etc/systemd/system/openclaw-gateway@<user>.service`
 - Assigns gateway port: `GATEWAY_PORT_BASE + (uid % 1000)`
+- Prints a pre-filled Slack app manifest for one-step app creation
 
 ### Command sequence (operator exact flow)
 1. Start staged onboarding:
    - `sudo openclaw-userctl add_user oc_alice`
-2. Script pauses at **Slack config checkpoint** and prints token instructions.
-3. Operator configures Slack tokens for the user:
+   - Script provisions user, applies workspace template, creates service file, prints Slack manifest
+2. **Customize USER.md** for the new user:
+   - Edit `/home/oc_alice/.openclaw/workspace/USER.md` with Alice's name, role, Slack user ID
+3. Script pauses at **Slack config checkpoint** and prints:
+   - A pre-filled Slack app manifest (import at https://api.slack.com/apps → Create → From manifest)
+   - Instructions to generate the App Token (Socket Mode)
+   - The exact config commands to run
+4. Operator creates the Slack app via manifest import, then configures tokens:
    - `sudo -iu oc_alice openclaw config set channels.slack.botToken "xoxb-..."`
    - `sudo -iu oc_alice openclaw config set channels.slack.appToken "xapp-..."`
-4. Operator confirms:
+5. Operator confirms:
    - `sudo openclaw-userctl resume oc_alice DONE`
-5. Script pauses at **health check checkpoint**.
-6. Operator verifies the gateway is up and Slack is connected:
+6. Script pauses at **health check checkpoint**.
+7. Operator verifies the gateway is up and Slack is connected:
    - `sudo -iu oc_alice openclaw health`
    - Expected output includes: `Slack: ok`
-7. Operator confirms:
+8. Operator confirms:
    - `sudo openclaw-userctl resume oc_alice DONE`
-8. Script finalizes (idempotent: skips enable/restart if service already active) and marks onboarding complete.
+9. Script finalizes (idempotent: skips enable/restart if service already active) and marks onboarding complete.
 
 ### Retry / failure controls
 - Retry current checkpoint:
