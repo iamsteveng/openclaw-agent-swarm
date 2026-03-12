@@ -250,6 +250,23 @@ EOF
   echo "gateway_port=$port" >> "$(user_state_file "$u")"
 }
 
+# Auto-create Slack app if config token is set
+try_auto_create_slack_app() {
+  local u="$1"
+  local token="${ORCH_SLACK_CONFIG_TOKEN:-}"
+  local repo_dir
+  repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  local create_script="$repo_dir/scripts/slack-app-create.sh"
+
+  if [[ -z "$token" || ! -f "$create_script" ]]; then
+    return 1  # fall back to manual instructions
+  fi
+
+  echo "Slack config token found — running automated app creation..."
+  ORCH_POLICY_FILE="$POLICY_FILE" bash "$create_script" "$u"
+  return 0
+}
+
 # FIX #4: Slack config checkpoint — token-based with manifest import
 print_slack_checkpoint() {
   local u="$1"
@@ -415,7 +432,15 @@ cmd_add_user() {
 
   audit "ok" "add_user" "$u" "provisioned-awaiting-slack"
   echo "Provisioning complete for $u."
-  print_slack_checkpoint "$u"
+
+  # Try automated Slack app creation; fall back to manual instructions
+  if ! try_auto_create_slack_app "$u"; then
+    print_slack_checkpoint "$u"
+  else
+    echo ""
+    echo "Slack app configured. Confirm with:"
+    echo "  sudo openclaw-userctl resume $u DONE"
+  fi
 }
 
 cmd_resume() {
