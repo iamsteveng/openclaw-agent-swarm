@@ -2,7 +2,7 @@
 # slack-app-create.sh
 # Automates Slack app creation for a new OpenClaw user.
 # - Creates the Slack app via manifest API (fully automated)
-# - Prints OAuth install URL + app token instructions (2 manual steps)
+# - Guides through 2 manual steps (install + app token)
 # - Configures bot + app tokens into the user's OpenClaw
 #
 # Usage:
@@ -138,15 +138,12 @@ CREATE_RESP=$(slack_api "apps.manifest.create" "$ACCESS_TOKEN" "$MANIFEST")
 check_ok "$CREATE_RESP" "App creation"
 
 APP_ID="$(echo "$CREATE_RESP" | python3 -c "import json,sys; print(json.load(sys.stdin)['app_id'])")"
-CLIENT_ID="$(echo "$CREATE_RESP" | python3 -c "import json,sys; print(json.load(sys.stdin)['credentials']['client_id'])")"
-CLIENT_SECRET="$(echo "$CREATE_RESP" | python3 -c "import json,sys; print(json.load(sys.stdin)['credentials']['client_secret'])")"
+MANAGE_URL="${SLACK_API}/apps/${APP_ID}/general"
+INSTALL_URL="${SLACK_API}/apps/${APP_ID}/oauth"
 
 echo "    App created: $APP_ID ($APP_NAME)"
 
 # ── step 3: print manual steps ─────────────────────────────────────────────────
-
-OAUTH_URL="${SLACK_API}/oauth/v2/authorize?client_id=${CLIENT_ID}&scope=chat:write,im:history,im:read,im:write,channels:history,channels:read,groups:history,mpim:history,mpim:read,mpim:write,users:read,app_mentions:read,reactions:read,reactions:write,files:read,files:write&team=${TEAM_ID}"
-MANAGE_URL="${SLACK_API}/apps/${APP_ID}/general"
 
 echo ""
 echo "[3/4] Manual steps required (2 steps):"
@@ -154,12 +151,9 @@ echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "STEP A — Install app to workspace (get Bot Token)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Open this URL in your browser and click Allow:"
-echo ""
-echo "  $OAUTH_URL"
-echo ""
-echo "Then go to: ${SLACK_API}/apps/${APP_ID}/oauth"
-echo "Copy the Bot User OAuth Token (xoxb-...)"
+echo "Go to: $INSTALL_URL"
+echo "Click 'Install to Workspace' → Allow"
+echo "Copy the Bot User OAuth Token (xoxb-...) shown on the same page"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "STEP B — Generate App Token (Socket Mode)"
