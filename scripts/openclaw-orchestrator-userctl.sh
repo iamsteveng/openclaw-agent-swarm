@@ -489,6 +489,17 @@ cmd_add_user() {
     echo "  WARNING: auth-profiles.json not found at $auth_src — user will need manual API key setup."
   fi
 
+  # Remove auto-generated gateway.auth token — it causes CLI/gateway mismatch on first connect
+  local cfg="/home/$u/.openclaw/openclaw.json"
+  if [[ -f "$cfg" ]]; then
+    python3 -c "
+import json
+with open('$cfg') as f: c = json.load(f)
+c.get('gateway', {}).pop('auth', None)
+with open('$cfg', 'w') as f: json.dump(c, f, indent=2)
+" 2>/dev/null && chown "$u:$u" "$cfg" && echo "  Gateway auth token removed for $u."
+  fi
+
   # Apply MVP workspace template if repo is available
   local repo_dir
   repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
