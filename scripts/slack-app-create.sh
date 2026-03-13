@@ -190,3 +190,41 @@ echo ""
 echo "Next: restart the gateway and verify"
 echo "  sudo systemctl restart openclaw-gateway@${USERNAME}.service"
 echo "  sudo -iu $USERNAME openclaw health"
+
+# ── step 5: restart gateway and send greeting ──────────────────────────────────
+
+echo ""
+echo "[5/5] Restarting gateway and sending greeting DM..."
+sudo systemctl restart "openclaw-gateway@${USERNAME}.service" 2>/dev/null || true
+sleep 20
+
+# Get Slack user ID from allowFrom config
+SLACK_USER_ID="$(python3 -c "
+import json
+with open('/home/$USERNAME/.openclaw/openclaw.json') as f: c = json.load(f)
+ch = c.get('channels', {}).get('slack', {})
+af = ch.get('allowFrom', ch.get('dm', {}).get('allowFrom', []))
+print(af[0] if af else '')
+" 2>/dev/null)"
+
+if [[ -n "$SLACK_USER_ID" && "$BOT_TOKEN" == xoxb-* ]]; then
+  DISPLAY="${USERNAME#oc_}"
+  DM_RESP="$(curl -s -X POST https://slack.com/api/conversations.open \
+    -H "Authorization: Bearer $BOT_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"users\": \"$SLACK_USER_ID\"}")"
+  DM_CHANNEL="$(echo "$DM_RESP" | python3 -c "import json,sys; print(json.load(sys.stdin).get('channel',{}).get('id',''))" 2>/dev/null)"
+
+  if [[ -n "$DM_CHANNEL" ]]; then
+    GREET_RESP="$(curl -s -X POST https://slack.com/api/chat.postMessage \
+      -H "Authorization: Bearer $BOT_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d "{\"channel\": \"$DM_CHANNEL\", \"text\": \"Hey ${DISPLAY^} 👋 I'm your OpenClaw Agent. Steve has set me up for you — feel free to DM me anytime!\"}")"
+    GREET_OK="$(echo "$GREET_RESP" | python3 -c "import json,sys; print(json.load(sys.stdin).get('ok','false'))" 2>/dev/null)"
+    if [[ "$GREET_OK" == "true" || "$GREET_OK" == "True" ]]; then
+      echo "  ✓ Greeting DM sent to $SLACK_USER_ID"
+    else
+      echo "  (greeting failed — send manually)"
+    fi
+  fi
+fi
